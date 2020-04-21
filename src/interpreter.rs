@@ -1,4 +1,5 @@
 use crate::lexer::{Annotation, Program, Token, TokenKind};
+use log::{debug, trace};
 use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -12,12 +13,13 @@ pub enum InterpreterErrorKind {
 type InterpreterError = Annotation<InterpreterErrorKind>;
 
 pub struct SimpleInterpreter {
-    hand: Option<i8>,
+    hand: Option<i16>,
     program_cursor: usize,
-    cells: Vec<Option<i8>>,
+    cells: Vec<Option<i16>>,
     program: Program,
-    input_stream: Option<VecDeque<i8>>,
+    inbox: Option<VecDeque<i16>>,
     jump_table: HashMap<usize, usize>,
+    step_counter: usize,
 }
 
 impl SimpleInterpreter {
@@ -27,15 +29,16 @@ impl SimpleInterpreter {
             program_cursor: 0,
             cells: vec![],
             program: Vec::new(),
-            input_stream: None,
+            inbox: None,
             jump_table: HashMap::new(),
+            step_counter: 0,
         }
     }
-    pub fn set_input_stream(&mut self, input_stream: String) {
+    pub fn set_inbox(&mut self, inbox: String) {
         let mut stream = VecDeque::new();
         let mut n = None;
         let mut minus_flag = false;
-        for c in input_stream.bytes() {
+        for c in inbox.bytes() {
             match c {
                 b'0'..=b'9' => match n.as_mut() {
                     Some(v) => {
@@ -49,9 +52,9 @@ impl SimpleInterpreter {
                 _ => {
                     if let Some(v) = n {
                         if minus_flag {
-                            stream.push_back(-1 * v as i8);
+                            stream.push_back(-1 * v as i16);
                         } else {
-                            stream.push_back(v as i8);
+                            stream.push_back(v as i16);
                         }
                     }
                     n = None;
@@ -61,10 +64,13 @@ impl SimpleInterpreter {
                 }
             }
         }
-        self.input_stream = Some(stream);
+        self.inbox = Some(stream);
+    }
+    pub fn show_inbox(&self) -> &Option<VecDeque<i16>> {
+        &self.inbox
     }
     fn eval_inbox(&mut self, command: &Token) -> Result<(), InterpreterError> {
-        self.hand = if let Some(ref mut input) = self.input_stream {
+        self.hand = if let Some(ref mut input) = self.inbox {
             if input.len() > 0 {
                 Some(input.pop_front().unwrap())
             } else {
@@ -80,6 +86,7 @@ impl SimpleInterpreter {
             });
         };
         self.program_cursor += 1;
+        self.step_counter += 1;
         Ok(())
     }
     fn eval_outbox(&mut self, command: &Token) -> Result<(), InterpreterError> {
@@ -93,6 +100,7 @@ impl SimpleInterpreter {
             });
         }
         self.program_cursor += 1;
+        self.step_counter += 1;
         Ok(())
     }
     fn eval_copy_from(&mut self, command: &Token, index: usize) -> Result<(), InterpreterError> {
@@ -105,6 +113,7 @@ impl SimpleInterpreter {
             });
         }
         self.program_cursor += 1;
+        self.step_counter += 1;
         Ok(())
     }
     fn eval_copy_to(&mut self, command: &Token, index: usize) -> Result<(), InterpreterError> {
@@ -117,6 +126,7 @@ impl SimpleInterpreter {
             });
         }
         self.program_cursor += 1;
+        self.step_counter += 1;
         Ok(())
     }
 
@@ -137,6 +147,7 @@ impl SimpleInterpreter {
             });
         }
         self.program_cursor += 1;
+        self.step_counter += 1;
         Ok(())
     }
     fn eval_sub(&mut self, command: &Token, index: usize) -> Result<(), InterpreterError> {
@@ -156,6 +167,7 @@ impl SimpleInterpreter {
             });
         }
         self.program_cursor += 1;
+        self.step_counter += 1;
         Ok(())
     }
     fn eval_bump_plus(&mut self, command: &Token, index: usize) -> Result<(), InterpreterError> {
@@ -168,6 +180,7 @@ impl SimpleInterpreter {
             });
         }
         self.program_cursor += 1;
+        self.step_counter += 1;
         Ok(())
     }
     fn eval_bump_minus(&mut self, command: &Token, index: usize) -> Result<(), InterpreterError> {
@@ -180,6 +193,7 @@ impl SimpleInterpreter {
             });
         }
         self.program_cursor += 1;
+        self.step_counter += 1;
         Ok(())
     }
 
@@ -192,6 +206,7 @@ impl SimpleInterpreter {
                 location: command.location,
             });
         }
+        self.step_counter += 1;
         Ok(())
     }
     fn eval_jump_if_zero(&mut self, command: &Token, label: usize) -> Result<(), InterpreterError> {
@@ -207,6 +222,7 @@ impl SimpleInterpreter {
         } else {
             self.program_cursor += 1;
         }
+        self.step_counter += 1;
         Ok(())
     }
     fn eval_jump_if_neg(&mut self, command: &Token, label: usize) -> Result<(), InterpreterError> {
@@ -226,6 +242,7 @@ impl SimpleInterpreter {
         } else {
             self.program_cursor += 1;
         }
+        self.step_counter += 1;
         Ok(())
     }
     fn init(&mut self) -> Result<usize, InterpreterError> {
@@ -270,6 +287,7 @@ impl SimpleInterpreter {
         };
         while self.program_cursor < self.program.len() {
             let command = &self.program[self.program_cursor].clone();
+            trace!("step:{}\tcommand:{:?}", self.step_counter, command);
             let res = match command.value {
                 TokenKind::InBox => self.eval_inbox(command),
                 TokenKind::OutBox => self.eval_outbox(command),
@@ -288,7 +306,13 @@ impl SimpleInterpreter {
                 }
             };
             if res.is_err() {
-                return Err(res.err().unwrap());
+                let err = res.err().unwrap();
+                // if an EmptyInBox error is happened, worker will exit with status 0.
+                if err.value == InterpreterErrorKind::EmptyInBox {
+                    debug!("EmptyInBox and return.");
+                    return Ok(0);
+                }
+                return Err(err);
             }
         }
         Ok(0)

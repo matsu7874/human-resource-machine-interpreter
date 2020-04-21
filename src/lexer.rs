@@ -110,17 +110,23 @@ impl Lexer {
             }
             end += 1;
         }
+        // lexer allows program which terminated with '\n' or not '\n'.
+        if start < end {
+            chunks.push(Annotation::new(&input[start..end], Location { line, col }));
+        }
 
         let mut i = 0;
         while i < chunks.len() {
             if let Some(command) = match chunks[i].value {
                 "inbox" => {
+                    let token = Token::inbox(chunks[i].location);
                     i += 1;
-                    Some(Token::inbox(chunks[i].location))
+                    Some(token)
                 }
                 "outbox" => {
+                    let token = Token::outbox(chunks[i].location);
                     i += 1;
-                    Some(Token::outbox(chunks[i].location))
+                    Some(token)
                 }
                 "copyfrom" => {
                     if let Some(arg) = require_arg!(chunks, usize, i + 1) {
@@ -212,13 +218,17 @@ impl Lexer {
                         None
                     }
                 }
-                _ => None,
+                _ => {
+                    i += 1;
+                    None
+                }
             } {
                 tokens.push(command);
+            } else {
+                i += 1;
             }
             line += 1;
         }
-
         tokens
     }
 }
