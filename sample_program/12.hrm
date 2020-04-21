@@ -1,0 +1,15 @@
+jump_target main
+    inbox
+    copyto 0
+    add 0
+    copyto 1
+    add 1
+    copyto 2
+    add 2
+    copyto 3
+    add 3
+    copyto 4
+    add 4
+    add 3
+    outbox
+jump main
