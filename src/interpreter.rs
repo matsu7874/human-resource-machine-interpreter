@@ -170,9 +170,15 @@ impl SimpleInterpreter {
         self.step_counter += 1;
         Ok(())
     }
-    fn eval_bump_plus(&mut self, command: &Token, index: usize) -> Result<(), InterpreterError> {
+    fn eval_bump(
+        &mut self,
+        command: &Token,
+        index: usize,
+        delta: i16,
+    ) -> Result<(), InterpreterError> {
         if let Some(ref mut floor_value) = self.cells[index] {
-            *floor_value += 1;
+            *floor_value += delta;
+            self.hand = Some(*floor_value);
         } else {
             return Err(InterpreterError {
                 value: InterpreterErrorKind::EmptyFloorValue,
@@ -183,18 +189,11 @@ impl SimpleInterpreter {
         self.step_counter += 1;
         Ok(())
     }
+    fn eval_bump_plus(&mut self, command: &Token, index: usize) -> Result<(), InterpreterError> {
+        self.eval_bump(command, index, 1)
+    }
     fn eval_bump_minus(&mut self, command: &Token, index: usize) -> Result<(), InterpreterError> {
-        if let Some(ref mut floor_value) = self.cells[index] {
-            *floor_value -= 1;
-        } else {
-            return Err(InterpreterError {
-                value: InterpreterErrorKind::EmptyFloorValue,
-                location: command.location,
-            });
-        }
-        self.program_cursor += 1;
-        self.step_counter += 1;
-        Ok(())
+        self.eval_bump(command, index, -1)
     }
 
     fn eval_jump(&mut self, command: &Token, label: usize) -> Result<(), InterpreterError> {

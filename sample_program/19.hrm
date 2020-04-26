@@ -1,0 +1,14 @@
+jump_target input
+inbox
+copyto 0
+
+jump_target main
+outbox
+copyfrom 0
+jump_if_zero input
+jump_if_neg negative_branch
+bump_minus 0
+jump main
+jump_target negative_branch
+bump_plus 0
+jump main
